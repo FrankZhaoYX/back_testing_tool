@@ -10,13 +10,21 @@ import pandas as pd
 import requests
 
 EOD_URL = "https://eodhd.com/api/eod/{ticker}"
+PLACEHOLDER_KEYS = {"your_api_key_here", "changeme", ""}
 CSV_COLUMNS = ["date", "open", "high", "low", "close", "adjusted_close", "volume"]
 
 
+class EODHDError(RuntimeError):
+    """Raised for EODHD API failures; messages never include the API token."""
+
+
 def get_api_key(api_key: str | None = None) -> str:
-    key = api_key or os.environ.get("EODHD_API_KEY")
-    if not key:
-        raise RuntimeError("EODHD API key missing: pass --api-key or set EODHD_API_KEY")
+    key = (api_key or os.environ.get("EODHD_API_KEY") or "").strip()
+    if key in PLACEHOLDER_KEYS:
+        raise EODHDError(
+            "EODHD API key missing: set EODHD_API_KEY in .env (copy it from https://eodhd.com/cp/settings) "
+            "or pass --api-key"
+        )
     return key
 
 
@@ -48,11 +56,18 @@ def fetch_eod(
         if resp.status_code == 429 and attempt < retries - 1:
             time.sleep(2 ** (attempt + 1))
             continue
-        resp.raise_for_status()
+        if resp.status_code in (401, 403):
+            raise EODHDError(
+                f"EODHD rejected the API key ({resp.status_code}) while fetching {symbol}. "
+                "Check EODHD_API_KEY in .env, and that your plan includes end-of-day US data."
+            )
+        if resp.status_code >= 400:
+            # requests' own HTTPError message contains the full URL, token included
+            raise EODHDError(f"EODHD request for {symbol} failed with HTTP {resp.status_code}: {resp.text[:200]}")
         break
     rows = resp.json()
     if not isinstance(rows, list) or not rows:
-        raise ValueError(f"EODHD returned no data for {symbol}: {rows!r}")
+        raise EODHDError(f"EODHD returned no data for {symbol}: {rows!r}")
 
     df = pd.DataFrame(rows)
     missing = set(CSV_COLUMNS) - set(df.columns)

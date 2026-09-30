@@ -7,6 +7,7 @@ from backtest_tool import eodhd
 class FakeResponse:
     def __init__(self, payload, status=200):
         self.payload, self.status_code = payload, status
+        self.text = str(payload)
 
     def json(self):
         return self.payload
@@ -53,11 +54,24 @@ def test_fetch_eod_retries_on_rate_limit(monkeypatch):
 
 
 def test_fetch_eod_empty_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(eodhd.EODHDError):
         eodhd.fetch_eod("NOPE", api_key="k", session=FakeSession([FakeResponse([])]))
 
 
 def test_missing_key(monkeypatch):
     monkeypatch.delenv("EODHD_API_KEY", raising=False)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(eodhd.EODHDError):
         eodhd.get_api_key()
+
+
+def test_placeholder_key_rejected():
+    with pytest.raises(eodhd.EODHDError, match="missing"):
+        eodhd.get_api_key("your_api_key_here")
+
+
+@pytest.mark.parametrize("status", [401, 500])
+def test_http_errors_do_not_leak_token(status):
+    session = FakeSession([FakeResponse([], status=status)])
+    with pytest.raises(eodhd.EODHDError) as err:
+        eodhd.fetch_eod("SPY", api_key="SECRET123", session=session)
+    assert "SECRET123" not in str(err.value)

@@ -110,6 +110,15 @@ def cmd_backtest(args) -> None:
 def main(argv=None) -> None:
     _load_dotenv()
     args = build_parser().parse_args(argv)
+    from .eodhd import EODHDError
+
+    try:
+        _dispatch(args)
+    except EODHDError as exc:
+        raise SystemExit(f"error: {exc}") from None
+
+
+def _dispatch(args) -> None:
     if args.command == "fetch":
         cmd_fetch(args)
     elif args.command == "dump":
