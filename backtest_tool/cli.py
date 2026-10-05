@@ -58,7 +58,34 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--data-start", default="2008-01-01")
     run.add_argument("--api-key")
     bt_args(run)
+    corr = sub.add_parser("correlation", help="daily-return correlation / beta report")
+    corr.add_argument("--symbols", nargs="+", default=["SPY", "QQQ", "SMH"], help="first symbol is the market for beta")
+    corr.add_argument("--years", type=float, default=10)
+    corr.add_argument("--window", type=int, default=63, help="rolling correlation window (trading days)")
+    corr.add_argument("--csv-dir", default=DEFAULT_CSV_DIR)
+    corr.add_argument("--out", default="results/correlation")
+    corr.add_argument("--api-key")
+    corr.add_argument("--no-fetch", action="store_true", help="use the CSVs already in --csv-dir")
     return parser
+
+
+def cmd_correlation(args) -> None:
+    import pandas as pd
+
+    from .correlation import analyze, last_years, load_prices, write_report
+
+    symbols = [s.upper() for s in args.symbols]
+    start = pd.Timestamp.today().normalize() - pd.DateOffset(days=int(args.years * 365.25) + 7)
+    if not args.no_fetch:
+        from .eodhd import download_universe
+
+        download_universe(symbols, args.csv_dir, start=start.strftime("%Y-%m-%d"), api_key=args.api_key)
+    prices = last_years(load_prices(args.csv_dir, symbols), args.years)
+    res = analyze(prices, rolling_window=args.window)
+    path = write_report(res, args.out)
+    print("\n相关系数 ρ:\n" + res["corr"].round(3).to_string())
+    print("\nβ (行对列):\n" + res["beta"].round(3).to_string())
+    print(f"\nreport -> {path}")
 
 
 def cmd_fetch(args) -> None:
@@ -125,6 +152,8 @@ def _dispatch(args) -> None:
         cmd_dump(args)
     elif args.command == "backtest":
         cmd_backtest(args)
+    elif args.command == "correlation":
+        cmd_correlation(args)
     elif args.command == "run":
         from .eodhd import download_universe
 

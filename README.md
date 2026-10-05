@@ -57,6 +57,19 @@ Useful `backtest` options:
 Output in `results/`: `summary.csv`, `<strategy>_daily.csv` (Qlib's daily account report),
 `<strategy>_rebalances.csv` (target weights on each rebalance) and `equity.png`.
 
+## Correlation report
+
+```bash
+python -m backtest_tool correlation                       # SPY QQQ SMH, last 10 years
+python -m backtest_tool correlation --symbols SPY TQQQ SOXX --years 5 --window 126
+```
+
+Uses daily simple returns on adjusted close, `r_t = (P_t − P_{t−1}) / P_{t−1}`, then
+`ρ = Cov(X,Y) / (σ_X σ_Y)` and `β = Cov(X,Y) / σ_X²` (the first symbol is the market for β).
+Writes `results/correlation/correlation_report.html` (correlation, β and R² matrices, risk/return
+table, growth chart, return scatter with β fit, rolling correlation, per-year and up/down-market
+correlation) plus CSVs of every table. `--no-fetch` reuses CSVs already in `data/csv`.
+
 ## Built-in strategies
 
 | name | rule |
