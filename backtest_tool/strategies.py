@@ -153,6 +153,53 @@ def alpha_tilt(
     return out.dropna(how="any")
 
 
+def take_profit(
+    symbols,
+    start,
+    end,
+    weights: dict[str, float],
+    take_profit: float = 0.2,
+    reentry_drop: float = 0.1,
+    max_wait: int = 126,
+    defensive: str | None = None,
+    rebalance: str = "Q",
+    **_,
+) -> pd.DataFrame:
+    """Fixed weights with a per-asset take-profit rule.
+
+    An asset is sold once its close is ``take_profit`` above its entry price; the
+    weight moves to ``defensive`` (or cash). It is bought back when the price falls
+    ``reentry_drop`` below the sale price, or after ``max_wait`` trading days.
+    Rows are emitted on every state change and at each ``rebalance`` period end.
+    """
+    base = _base_weights(symbols, weights)
+    risky = [s for s in symbols if base[s] > 0 and s != defensive]
+    close = load_fields(symbols, {"close": "$close"}, start, end)["close"].dropna(how="all")
+    held = pd.DataFrame(True, index=close.index, columns=risky)
+    for sym in risky:
+        prices = close[sym].to_numpy()
+        in_position, ref, waited = True, None, 0
+        for i, price in enumerate(prices):
+            if price != price:  # not listed yet
+                held.iat[i, held.columns.get_loc(sym)] = False
+                continue
+            if ref is None:
+                ref = price
+            if in_position and price >= ref * (1 + take_profit):
+                in_position, ref, waited = False, price, 0
+            elif not in_position:
+                waited += 1
+                if price <= ref * (1 - reentry_drop) or waited >= max_wait:
+                    in_position, ref = True, price
+            held.iat[i, held.columns.get_loc(sym)] = in_position
+    out = pd.DataFrame(0.0, index=close.index, columns=symbols)
+    out[risky] = held.astype(float).mul(base[risky], axis=1)
+    if defensive:
+        out[defensive] = base[defensive] + (base[risky].sum() - out[risky].sum(axis=1))
+    changed = keep_changes(out).index
+    return out.loc[changed.union(_rebalance_dates(close.index, rebalance))]
+
+
 STRATEGIES: dict[str, Callable[..., pd.DataFrame]] = {
     "buy_and_hold": buy_and_hold,
     "equal_weight": equal_weight,
@@ -160,4 +207,5 @@ STRATEGIES: dict[str, Callable[..., pd.DataFrame]] = {
     "momentum": momentum_rotation,
     "fixed_weight": fixed_weight,
     "alpha_tilt": alpha_tilt,
+    "take_profit": take_profit,
 }

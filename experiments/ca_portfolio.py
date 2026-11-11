@@ -91,6 +91,20 @@ EXPERIMENTS = [
         rationale="E05 显示强倾斜长期更好，与减半趋势过滤组合作为候选最终方案",
         strategy="alpha_tilt", weights=CORE, params={"tilt": 1.0, "trend_window": 200, "trend_cut": 0.5, "defensive": "CLF"},
     ),
+    dict(
+        id="E11", name="E02+固定止盈20%",
+        change="每只 ETF 较买入价涨 20% 即全部卖出转入 CLF；较卖出价回落 10% 或等满 126 个交易日后买回",
+        rationale="检验宽基 ETF 是否需要固定止盈规则",
+        strategy="take_profit", weights=CORE,
+        params={"take_profit": 0.2, "reentry_drop": 0.1, "max_wait": 126, "defensive": "CLF"},
+    ),
+    dict(
+        id="E12", name="E02+固定止盈40%",
+        change="止盈线从 20% 放宽到 40%，其余同 E11",
+        rationale="看更宽的止盈线是否改变 E11 的结论",
+        strategy="take_profit", weights=CORE,
+        params={"take_profit": 0.4, "reentry_drop": 0.1, "max_wait": 126, "defensive": "CLF"},
+    ),
 ]
 
 # Conclusions, written after reviewing the measured results of each run (see the journal).
@@ -115,6 +129,10 @@ VERDICTS: dict[tuple[str, str], str] = {
     ("E09", "10y"): "十年反而略差于静态(13.3% vs 13.7%，回撤 -28.4%)。三年的优势不稳健，不采用",
     ("E10", "3y"): "强倾斜+减半趋势：年化 21.8%，略好于 E08",
     ("E10", "10y"): "十年年化 13.5%、回撤 -19.1%、夏普 1.13，数字略优于 E08，但换手 3.2 倍/年且常把个别 ETF 降到接近 0。备选，适合能接受持仓大幅摆动的情况",
+    ("E11", "3y"): "固定止盈 20%：年化 20.4%，比不止盈(E02 22.7%)少 2.3 个百分点、终值少约 5000。波动降到 9.8%、夏普 1.95，但原因是平均约 34% 的资金停在短债里，等于降低了仓位，而不是选时有效",
+    ("E11", "10y"): "十年年化 12.3%(E02 13.7%)，回撤 -27.7% 几乎没改善，夏普 1.03 与不止盈(1.00)基本相同，换手 2.6 倍/年。长期没有优势",
+    ("E12", "3y"): "止盈 40%：年化 20.1%，回撤 -7.4%(恰好在 2025 年 4 月下跌前已卖出部分仓位)。这个回撤改善取决于卖出时点，带有运气成分",
+    ("E12", "10y"): "十年年化 12.7%、回撤 -19.5%、夏普 1.03。回撤数字与 E08 相同但年化略低，且规则对止盈线和买回条件很敏感。结论：宽基 ETF 不采用固定止盈",
 }
 
 

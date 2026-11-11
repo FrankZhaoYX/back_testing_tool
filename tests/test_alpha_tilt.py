@@ -68,3 +68,14 @@ def test_full_weight_in_one_asset_does_not_crash(qlib_dir):
     """All risky assets below trend -> 100% defensive; float round-off must not break qlib."""
     res = run_backtest("fixed_weight", DEFAULT_UNIVERSE, START, END, weights={"SPY": 1.0000000000000002})
     assert res.report["value"].iloc[-1] > 0
+
+
+def test_take_profit_sells_and_rebuys(qlib_dir):
+    from backtest_tool.strategies import take_profit
+
+    w = take_profit(DEFAULT_UNIVERSE, "2019-01-02", END, weights=BASE, take_profit=0.1,
+                    reentry_drop=0.05, max_wait=60, defensive="SMH")  # fmt: skip
+    assert w.sum(axis=1).round(9).eq(0.8).all()  # sold weight is parked in the defensive asset
+    spy = w["SPY"].round(9)
+    assert set(spy.unique()) == {0.0, 0.4}  # fully in or fully out
+    assert (spy.diff().dropna() > 0).any() and (spy.diff().dropna() < 0).any()  # sold and bought back
