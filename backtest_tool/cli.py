@@ -7,7 +7,9 @@ import warnings
 from datetime import date
 
 from . import DEFAULT_BENCHMARK, DEFAULT_UNIVERSE
-from .strategies import STRATEGIES
+
+# strategies that need no extra configuration (fixed_weight / alpha_tilt take a weights dict)
+CLI_STRATEGIES = ["buy_and_hold", "equal_weight", "sma_trend", "momentum"]
 
 DEFAULT_CSV_DIR = "data/csv"
 DEFAULT_QLIB_DIR = "data/qlib"
@@ -35,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def bt_args(p):
         p.add_argument("--symbols", nargs="+", default=DEFAULT_UNIVERSE)
-        p.add_argument("--strategy", nargs="+", default=["all"], choices=["all", *STRATEGIES])
+        p.add_argument("--strategy", nargs="+", default=["all"], choices=["all", *CLI_STRATEGIES])
         p.add_argument("--start", default="2012-01-01")
         p.add_argument("--end", default=date.today().isoformat())
         p.add_argument("--benchmark", default=DEFAULT_BENCHMARK)
@@ -107,7 +109,7 @@ def cmd_backtest(args) -> None:
 
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     init_qlib(args.qlib_dir)
-    names = list(STRATEGIES) if "all" in args.strategy else args.strategy
+    names = CLI_STRATEGIES if "all" in args.strategy else args.strategy
     params = {
         "window": args.sma_window,
         "lookback": args.mom_lookback,

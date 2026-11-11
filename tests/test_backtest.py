@@ -5,7 +5,7 @@ import pytest
 from backtest_tool import DEFAULT_UNIVERSE
 from backtest_tool.engine import run_backtest
 from backtest_tool.metrics import max_drawdown, summarize
-from backtest_tool.strategies import STRATEGIES, keep_changes, sma_trend
+from backtest_tool.strategies import keep_changes, sma_trend
 
 START, END = "2020-01-02", "2022-12-30"
 
@@ -26,7 +26,7 @@ def test_sma_trend_weights_never_exceed_one(qlib_dir):
     assert (w.sum(axis=1) <= 1 + 1e-9).all() and (w >= 0).all().all()
 
 
-@pytest.mark.parametrize("name", list(STRATEGIES))
+@pytest.mark.parametrize("name", ["buy_and_hold", "equal_weight", "sma_trend", "momentum"])
 def test_strategies_run(qlib_dir, name):
     res = run_backtest(name, DEFAULT_UNIVERSE, START, END)
     assert res.report.index[0] == pd.Timestamp(START)

@@ -18,14 +18,22 @@ class EODHDError(RuntimeError):
     """Raised for EODHD API failures; messages never include the API token."""
 
 
-def get_api_key(api_key: str | None = None) -> str:
+def get_api_key(api_key: str | None = None) -> str | None:
+    """Return the API token, or None when ``EODHD_PROXY_AUTH=1`` (a proxy injects the credential)."""
     key = (api_key or os.environ.get("EODHD_API_KEY") or "").strip()
     if key in PLACEHOLDER_KEYS:
+        if os.environ.get("EODHD_PROXY_AUTH") == "1":
+            return None
         raise EODHDError(
             "EODHD API key missing: set EODHD_API_KEY in .env (copy it from https://eodhd.com/cp/settings) "
             "or pass --api-key"
         )
     return key
+
+
+def base_symbol(symbol: str) -> str:
+    """'XIC.TO' -> 'XIC': the name used for CSV files and Qlib instruments."""
+    return symbol.split(".")[0].upper()
 
 
 def to_eodhd_ticker(symbol: str, exchange: str = "US") -> str:
@@ -43,7 +51,10 @@ def fetch_eod(
     retries: int = 3,
 ) -> pd.DataFrame:
     """Fetch daily bars for one symbol. Returns a frame with CSV_COLUMNS, sorted by date."""
-    params = {"api_token": get_api_key(api_key), "fmt": "json", "period": "d", "order": "a"}
+    params = {"fmt": "json", "period": "d", "order": "a"}
+    token = get_api_key(api_key)
+    if token:
+        params["api_token"] = token
     if start:
         params["from"] = start
     if end:
@@ -86,7 +97,7 @@ def download_universe(
     api_key: str | None = None,
     exchange: str = "US",
 ) -> dict[str, Path]:
-    """Download every symbol to ``<csv_dir>/<SYMBOL>.csv``; returns the written paths."""
+    """Download every symbol to ``<csv_dir>/<SYMBOL>.csv`` (exchange suffix dropped); returns the paths."""
     csv_dir = Path(csv_dir)
     csv_dir.mkdir(parents=True, exist_ok=True)
     key = get_api_key(api_key)
@@ -94,8 +105,8 @@ def download_universe(
     with requests.Session() as session:
         for symbol in symbols:
             df = fetch_eod(symbol, start, end, api_key=key, exchange=exchange, session=session)
-            path = csv_dir / f"{symbol.upper()}.csv"
+            path = csv_dir / f"{base_symbol(symbol)}.csv"
             df.to_csv(path, index=False, date_format="%Y-%m-%d")
-            written[symbol.upper()] = path
+            written[base_symbol(symbol)] = path
             print(f"{symbol}: {len(df)} bars {df['date'].iloc[0]:%Y-%m-%d} -> {df['date'].iloc[-1]:%Y-%m-%d}")
     return written

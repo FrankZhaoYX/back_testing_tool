@@ -73,9 +73,91 @@ def momentum_rotation(symbols, start, end, lookback: int = 63, top_k: int = 1, r
     return weights.loc[_rebalance_dates(weights.index, rebalance)]
 
 
+def _base_weights(symbols: list[str], weights: dict[str, float]) -> pd.Series:
+    unknown = set(weights) - set(symbols)
+    if unknown:
+        raise KeyError(f"weights given for symbols not in the universe: {sorted(unknown)}")
+    base = pd.Series(weights, dtype=float).reindex(symbols).fillna(0.0)
+    if base.sum() > 1 + 1e-9 or (base < 0).any():
+        raise ValueError("base weights must be non-negative and sum to at most 1")
+    return base
+
+
+def fixed_weight(symbols, start, end, weights: dict[str, float], rebalance: str = "Q", **_) -> pd.DataFrame:
+    """Strategic allocation: rebalance back to fixed ``weights`` at the end of each period."""
+    base = _base_weights(symbols, weights)
+    close = load_fields(symbols, {"close": "$close"}, start, end)["close"].dropna(how="all")
+    dates = _rebalance_dates(close.index, rebalance)
+    return pd.DataFrame([base.to_numpy()] * len(dates), index=dates, columns=symbols)
+
+
+def alpha_tilt(
+    symbols,
+    start,
+    end,
+    weights: dict[str, float],
+    rebalance: str = "M",
+    mom_windows: tuple[int, ...] = (21, 63, 126, 252),
+    tilt: float = 0.5,
+    trend_window: int | None = 200,
+    trend_cut: float = 1.0,
+    defensive: str | None = None,
+    inv_vol_window: int | None = None,
+    **_,
+) -> pd.DataFrame:
+    """Strategic weights tilted by alpha signals, decided at each period end.
+
+    1. Momentum tilt: score = average of trailing returns over ``mom_windows``;
+       the cross-sectional z-score (clipped to +-1.5) scales each base weight by
+       ``1 + tilt * z / 1.5``, i.e. within ``[1 - tilt, 1 + tilt]``. The risky
+       sleeve is then renormalised so the tilt only moves money *between* assets.
+    2. Optional risk scaling: multiply by inverse ``inv_vol_window``-day volatility
+       before renormalising (lower-vol assets get more capital).
+    3. Trend filter: an asset below its ``trend_window``-day SMA loses ``trend_cut``
+       of its weight, which moves to ``defensive`` (or stays in cash if None).
+
+    Assets with a zero base weight, and the defensive asset, are never tilted.
+    """
+    base = _base_weights(symbols, weights)
+    risky = [s for s in symbols if base[s] > 0 and s != defensive]
+    fields = {"close": "$close"}
+    fields.update({f"mom{w}": f"$close / Ref($close, {w}) - 1" for w in mom_windows})
+    if trend_window:
+        fields["sma"] = f"Mean($close, {trend_window})"
+    if inv_vol_window:
+        fields["vol"] = f"Std($close / Ref($close, 1) - 1, {inv_vol_window})"
+    data = load_fields(symbols, fields, start, end)
+    close = data["close"].dropna(how="all")
+    dates = _rebalance_dates(close.index, rebalance)
+
+    score = sum(data[f"mom{w}"] for w in mom_windows) / len(mom_windows)
+    score = score.loc[dates, risky]
+    z = score.sub(score.mean(axis=1), axis=0).div(score.std(axis=1, ddof=0).replace(0, 1), axis=0)
+    mult = 1 + tilt * z.clip(-1.5, 1.5).fillna(0) / 1.5
+    if inv_vol_window:
+        mult = mult / data["vol"].loc[dates, risky]
+    risky_budget = base[risky].sum()
+    tilted = mult.mul(base[risky], axis=1)
+    tilted = tilted.div(tilted.sum(axis=1), axis=0) * risky_budget
+
+    out = pd.DataFrame(0.0, index=dates, columns=symbols)
+    out[risky] = tilted
+    if defensive:
+        out[defensive] = base[defensive]
+    if trend_window:
+        below = (close.loc[dates, risky] < data["sma"].loc[dates, risky]).astype(float)
+        freed = out[risky] * below * trend_cut
+        out[risky] = out[risky] - freed
+        if defensive:
+            out[defensive] = out[defensive] + freed.sum(axis=1)
+    return out.dropna(how="any")
+
+
 STRATEGIES: dict[str, Callable[..., pd.DataFrame]] = {
     "buy_and_hold": buy_and_hold,
     "equal_weight": equal_weight,
     "sma_trend": sma_trend,
     "momentum": momentum_rotation,
+    "fixed_weight": fixed_weight,
+    "alpha_tilt": alpha_tilt,
 }

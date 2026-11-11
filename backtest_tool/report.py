@@ -56,7 +56,7 @@ def _plot_equity(results: list[BacktestResult], benchmark: str, path: Path) -> N
         ax_dd.plot(eq.index, (eq / eq.cummax() - 1).values, linewidth=1, **style)
     ax_eq.set_yscale("log")
     ax_eq.yaxis.set_major_formatter(matplotlib.ticker.FormatStrFormatter("%.1f"))
-    ax_eq.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax_eq.yaxis.set_minor_formatter(matplotlib.ticker.FormatStrFormatter("%.1f"))
     ax_eq.set_ylabel("Growth of $1 (log)")
     ax_eq.legend(frameon=False)
     ax_eq.grid(alpha=0.3)

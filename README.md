@@ -70,6 +70,34 @@ Writes `results/correlation/correlation_report.html` (correlation, β and R² ma
 table, growth chart, return scatter with β fit, rolling correlation, per-year and up/down-market
 correlation) plus CSVs of every table. `--no-fetch` reuses CSVs already in `data/csv`.
 
+## Strategy journal (Canadian ETF portfolio)
+
+`experiments/ca_portfolio.py` designs a strategic allocation plus alpha signals for a
+CAD-listed ETF portfolio (XUS, XQQ, XIC, XEG, XEF, XEC, CGL, optional XBB/CLF) on 50,000 capital,
+over a 3-year window with a 10-year robustness check.
+
+```bash
+python -m backtest_tool fetch --symbols XUS.TO XQQ.TO XIC.TO XEG.TO XEF.TO XEC.TO CGL.TO XBB.TO CLF.TO VFV.TO --data-start 2013-01-01
+python -m backtest_tool dump
+python -m experiments.ca_portfolio        # or: --only E08 --windows 3y
+```
+
+Every run appends one row to **`journal/strategy_journal.csv`**: what changed, why, the weights
+and parameters, the results (final value, CAGR, volatility, Sharpe, max drawdown, turnover, cost,
+benchmark comparison) and the conclusion drawn. `journal/current_target_weights.csv` holds the
+recommended variant's latest target holdings and `journal/equity_3y.png` the equity curves.
+Use `backtest_tool.journal.log_run` to log your own runs the same way.
+
+Two generic strategies back this (`backtest_tool/strategies.py`):
+
+| name | rule |
+|---|---|
+| `fixed_weight` | rebalance to a fixed `weights` dict each period |
+| `alpha_tilt` | fixed weights tilted by cross-sectional momentum (`tilt`), optionally scaled by inverse volatility, with a trend filter that moves `trend_cut` of any asset below its `trend_window`-day SMA into a `defensive` asset |
+
+Tickers with an exchange suffix (`XIC.TO`) are stored without it (`XIC`). If a proxy injects your
+EODHD credential, set `EODHD_PROXY_AUTH=1` instead of `EODHD_API_KEY`.
+
 ## Built-in strategies
 
 | name | rule |

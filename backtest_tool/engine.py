@@ -55,7 +55,8 @@ class TargetWeightStrategy(WeightStrategyBase):
         self._invested = 1.0
 
     def generate_target_weight_position(self, score, current, trade_start_time, trade_end_time):
-        weights = {inst: float(w) for inst, w in score.dropna().items() if w > 0}
+        # clip guards against float round-off (qlib rejects a weight of 1.0000000000000002)
+        weights = {inst: min(float(w), 1.0) for inst, w in score.dropna().items() if w > 1e-9}
         self._invested = min(sum(weights.values()), 1.0)
         return weights
 
