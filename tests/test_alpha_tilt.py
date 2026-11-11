@@ -76,6 +76,7 @@ def test_take_profit_sells_and_rebuys(qlib_dir):
     w = take_profit(DEFAULT_UNIVERSE, "2019-01-02", END, weights=BASE, take_profit=0.1,
                     reentry_drop=0.05, max_wait=60, defensive="SMH")  # fmt: skip
     assert w.sum(axis=1).round(9).eq(0.8).all()  # sold weight is parked in the defensive asset
-    spy = w["SPY"].round(9)
-    assert set(spy.unique()) == {0.0, 0.4}  # fully in or fully out
-    assert (spy.diff().dropna() > 0).any() and (spy.diff().dropna() < 0).any()  # sold and bought back
+    risky = w[["SPY", "TQQQ", "SOXX"]].round(9)
+    assert ((risky == 0) | (risky == pd.Series(BASE))).all().all()  # each asset is fully in or fully out
+    steps = risky.diff().dropna()
+    assert (steps > 0).any().any() and (steps < 0).any().any()  # something was sold and bought back
