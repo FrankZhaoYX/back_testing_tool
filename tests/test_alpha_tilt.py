@@ -80,3 +80,22 @@ def test_take_profit_sells_and_rebuys(qlib_dir):
     assert ((risky == 0) | (risky == pd.Series(BASE))).all().all()  # each asset is fully in or fully out
     steps = risky.diff().dropna()
     assert (steps > 0).any().any() and (steps < 0).any().any()  # something was sold and bought back
+
+
+def test_dca_invests_gradually_and_ends_fully_invested(qlib_dir):
+    from backtest_tool.dca import dca_backtest
+
+    kwargs = dict(start=START, end=END, capital=50_000, cost_bps=0)
+    lump = dca_backtest("SPY", months=1, **kwargs)
+    dca = dca_backtest("SPY", months=12, **kwargs)
+    assert lump.report["cash"].iloc[0] == pytest.approx(0)  # one instalment == lump sum
+    assert dca.report["value"].iloc[0] == pytest.approx(50_000 / 12)
+    assert dca.report["cash"].iloc[0] == pytest.approx(50_000 * 11 / 12)
+    assert dca.report["cash"].iloc[-1] == pytest.approx(0)
+    assert (dca.report["cash"].diff().dropna() <= 1e-9).all()  # cash only ever goes down
+    # with no costs, daily returns compound exactly to the final account value
+    assert (1 + dca.net_returns).prod() * 50_000 == pytest.approx(dca.report["account"].iloc[-1], rel=1e-5)
+
+    parked = dca_backtest("SPY", months=12, park="SMH", **kwargs)
+    assert parked.report["cash"].abs().max() == pytest.approx(0)  # idle money sits in the parking asset
+    assert parked.report["account"].iloc[0] == pytest.approx(50_000)

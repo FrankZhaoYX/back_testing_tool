@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import warnings
 
+from backtest_tool.dca import dca_backtest
 from backtest_tool.engine import init_qlib, run_backtest
 from backtest_tool.journal import DEFAULT_JOURNAL, log_run
 
@@ -105,6 +106,24 @@ EXPERIMENTS = [
         strategy="take_profit", weights=CORE,
         params={"take_profit": 0.4, "reentry_drop": 0.1, "max_wait": 126, "defensive": "CLF"},
     ),
+    dict(
+        id="E13", name="XUS 一次性买入",
+        change="5 万第一天全部买入 XUS(标普500)，之后不动",
+        rationale="用户认为组合收益不如标普500：把纯标普500作为正式对照记入日志",
+        strategy="fixed_weight", weights={"XUS": 1.0}, params={"rebalance": "Q"},
+    ),
+    dict(
+        id="E14", name="XUS 定投12个月",
+        change="5 万分 12 个月等额买入 XUS，未投入的钱放 CLF 短债",
+        rationale="检验定投这个动作本身是否比一次性买入收益高",
+        strategy="dca", weights={"XUS": 1.0}, params={"months": 12, "park": "CLF"},
+    ),
+    dict(
+        id="E15", name="XUS 定投36个月",
+        change="定投期从 12 个月拉长到 36 个月",
+        rationale="看定投期越长结果如何变化",
+        strategy="dca", weights={"XUS": 1.0}, params={"months": 36, "park": "CLF"},
+    ),
 ]
 
 # Conclusions, written after reviewing the measured results of each run (see the journal).
@@ -133,6 +152,12 @@ VERDICTS: dict[tuple[str, str], str] = {
     ("E11", "10y"): "十年年化 12.3%(E02 13.7%)，回撤 -27.7% 几乎没改善，夏普 1.03 与不止盈(1.00)基本相同，换手 2.6 倍/年。长期没有优势",
     ("E12", "3y"): "止盈 40%：年化 20.1%，回撤 -7.4%(恰好在 2025 年 4 月下跌前已卖出部分仓位)。这个回撤改善取决于卖出时点，带有运气成分",
     ("E12", "10y"): "十年年化 12.7%、回撤 -19.5%、夏普 1.03。回撤数字与 E08 相同但年化略低，且规则对止盈线和买回条件很敏感。结论：宽基 ETF 不采用固定止盈",
+    ("E13", "3y"): "纯标普500一次性买入：三年终值 89534(年化 21.6%)，低于新配置 E02 的 92144，且波动(14.6%)和回撤(-18.8%)都更大。这三年分散配置并不输标普500",
+    ("E13", "10y"): "十年终值 204169(年化 15.2%)，比 E02 的 180031(13.7%)多约 2.4 万。用户的判断在十年窗口成立：过去十年美股是全球最强的市场，分散到加拿大/国际拖低了收益；回撤两者相近(-27.0% vs -28.2%)",
+    ("E14", "3y"): "同样买 XUS，分 12 个月定投：终值 81206，比一次性买入少约 8300。上涨行情里晚买的部分成本更高",
+    ("E14", "10y"): "十年终值 193226，比一次性买入少约 1.1 万，回撤没有改善(-27.2%)。定投拉低了收益",
+    ("E15", "3y"): "分 36 个月定投：终值 69619，比一次性买入少约 2 万。回撤 -9.0% 只是因为大部分时间钱还没投进去",
+    ("E15", "10y"): "十年终值 173699，比一次性买入少约 3 万，也低于新配置 E02。结论：收益高的原因是标普500这个资产，而不是定投这个动作；手里已有的 5 万，定投期越长收益越低",
 }
 
 
@@ -152,11 +177,16 @@ def main() -> None:
             continue
         for window in args.windows:
             start, end = WINDOWS[window]
-            result = run_backtest(
-                exp["strategy"], UNIVERSE, start, end,
-                benchmark=BENCHMARK, capital=CAPITAL, cost_bps=COST_BPS,
-                weights=exp["weights"], **exp["params"],
-            )  # fmt: skip
+            if exp["strategy"] == "dca":
+                result = dca_backtest(
+                    "XUS", start, end, benchmark=BENCHMARK, capital=CAPITAL, cost_bps=COST_BPS, **exp["params"]
+                )
+            else:
+                result = run_backtest(
+                    exp["strategy"], UNIVERSE, start, end,
+                    benchmark=BENCHMARK, capital=CAPITAL, cost_bps=COST_BPS,
+                    weights=exp["weights"], **exp["params"],
+                )  # fmt: skip
             row = log_run(
                 result,
                 experiment=f"{exp['id']} {exp['name']} [{window}]",
