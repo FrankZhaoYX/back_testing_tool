@@ -6,8 +6,10 @@ import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .engine import BacktestResult
+if TYPE_CHECKING:  # avoid importing qlib just to write a CSV
+    from .engine import BacktestResult
 
 DEFAULT_JOURNAL = "journal/strategy_journal.csv"
 COLUMNS = [
@@ -82,3 +84,18 @@ def log_run(
             writer.writeheader()
         writer.writerow(row)
     return row
+
+
+def append_rows(path: str | Path, columns: list[str], rows: list[dict]) -> None:
+    """Append ``rows`` to a CSV journal, numbering them with a continuing ``run_id`` and a timestamp."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    next_id = _next_run_id(path)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    new_file = not path.exists()
+    with path.open("a", encoding="utf-8-sig" if new_file else "utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["run_id", "logged_at_utc", *columns])
+        if new_file:
+            writer.writeheader()
+        for offset, row in enumerate(rows):
+            writer.writerow({"run_id": next_id + offset, "logged_at_utc": stamp, **row})

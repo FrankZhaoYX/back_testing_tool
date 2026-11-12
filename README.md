@@ -98,6 +98,23 @@ Two generic strategies back this (`backtest_tool/strategies.py`):
 Tickers with an exchange suffix (`XIC.TO`) are stored without it (`XIC`). If a proxy injects your
 EODHD credential, set `EODHD_PROXY_AUTH=1` instead of `EODHD_API_KEY`.
 
+## Entry-timing research (IVV)
+
+`experiments/ivv_entry.py` asks whether buy signals (down streaks, 21-day / 52-week moving
+averages, drawdown from the 52-week high, RSI, Bollinger, one-day drops) beat simply buying one
+share on the first trading day of each month. Every variant receives the same money and never
+sells, so final wealth is directly comparable (`backtest_tool/entry.py`).
+
+```bash
+python -m backtest_tool fetch --symbols IVV.US --data-start 2013-01-01 --csv-dir data/csv_usd
+python -m experiments.ivv_entry
+```
+
+Each run is appended to **`journal/ivv_entry_journal.csv`** (rule, buys, shares, average cost,
+idle cash, final value, difference vs. the baseline over 10 years and each 5-year half, forward
+returns after the signal, verdict). `journal/ivv_signal_status.csv` shows which signals are firing
+on the latest bar and `journal/ivv_entry_vs_baseline.png` ranks all variants.
+
 ## Built-in strategies
 
 | name | rule |
